@@ -14,8 +14,8 @@ type Mapper struct{}
 func (m *Mapper) Map(val string, dict map[string][]string) {
 	vals := strings.Split(val, " ")
 	for _, s := range vals {
-		if len(s) > 0 {
-			ns := utils.NormalizeString(s)
+		ns := utils.NormalizeString(s)
+		if len(ns) > 0 {
 			dict[ns] = append(dict[ns], "1")
 		}
 	}
