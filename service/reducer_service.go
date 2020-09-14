@@ -15,10 +15,15 @@ type ReduceRequestContext struct {
 	FilePaths []string
 }
 
+// ReduceService represents a MapReduce reduce service
+type ReduceService struct {
+	dp *utils.DataProvisioner
+}
+
 // Reduce implements a MapReduce reduce service endpoint. The service takes
 // as input a path to a file containing a list of sorted key-value pairs and
 // generate a file of sorted processed key-value pairs
-func (srvc *MapReduce) Reduce(ctx *ReduceRequestContext, s *Status) error {
+func (srvc *ReduceService) Reduce(ctx *ReduceRequestContext, s *Status) error {
 	its := []io.Reader{}
 	for _, filePath := range ctx.FilePaths {
 		f, err := os.Open(filePath)

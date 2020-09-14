@@ -12,8 +12,10 @@ import (
 // StartWorker starts a MapReduce RPC worker
 func StartWorker() {
 	// Register MapReduce service endpoints
-	s := &service.MapReduce{}
-	rpc.Register(s)
+	ms := &service.MapService{}
+	rs := &service.ReduceService{}
+	rpc.Register(ms)
+	rpc.Register(rs)
 	rpc.HandleHTTP()
 
 	// Register HTTP endpoint for data transfer
