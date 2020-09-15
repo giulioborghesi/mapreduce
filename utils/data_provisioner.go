@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	localPathPrefix = "/Users/giulioborghesi/tmp/"
-	idle            = iota
+	pathPrefix = "/Users/giulioborghesi/tmp/"
+	idle       = iota
+	ready
 	inprogress
 	done
 	failed
@@ -24,35 +26,38 @@ type status int32
 
 // DataSource groups the information needed to provision data from a remote host
 type DataSource struct {
-	file string
-	host string
-	port string
+	File string
+	Host string
 }
 
 // DataProvisioner allows a service to provision data stored in remote hosts. The
-// provisioner will contact the host storing the data and download it locally
+// provisioner will contact the host storing the data through HTTP and download it
 type DataProvisioner struct {
+	host   string
 	status map[string]status
 	queue  list.List
 	sync.Mutex
 }
 
 // MakeDataProvisioner initializes the data provisioner from a list of data sources
-func MakeDataProvisioner(dss []DataSource) *DataProvisioner {
-	dp := &DataProvisioner{}
-	for _, ds := range dss {
-		localPath := localPathPrefix + ds.file
-		if _, err := os.Stat(localPath); os.IsNotExist(err) {
-			dp.status[ds.file] = idle
-			if ds.host != "" && ds.port != "" {
-				dp.queue.PushBack(ds)
-			}
-		} else {
-			dp.status[ds.file] = done
+func MakeDataProvisioner(host string, sources []DataSource) *DataProvisioner {
+	dp := &DataProvisioner{host: host, status: make(map[string]status)}
+	for _, source := range sources {
+		dp.status[source.File] = idle
+		if source.Host != "" {
+			dp.queue.PushBack(source)
+			dp.status[source.File] = ready
 		}
 	}
-
 	return dp
+}
+
+// sameHost checks whether two hosts are the same
+func sameHost(hostA string, hostB string) bool {
+	hostA = strings.Split(hostA, ":")[0]
+	hostB = strings.Split(hostB, ":")[0]
+	fmt.Println(hostA, hostB)
+	return hostA == hostB
 }
 
 // AddSource adds a data source to the DataProvisioner object
@@ -60,40 +65,51 @@ func (dp *DataProvisioner) AddSource(ds DataSource) {
 	dp.Lock()
 	defer dp.Unlock()
 
-	s, ok := dp.status[ds.file]
-	if !ok || s != idle {
+	s, ok := dp.status[ds.File]
+	if !ok || s == inprogress || s == done {
 		return
 	}
 	dp.queue.PushFront(ds)
+	dp.status[ds.File] = ready
 }
 
-// checkAndSetStatus sets the status of a data source to the client-specified one. The operation
-// is successfull only if the current status of the data source is either idle or failed
-func (dp *DataProvisioner) checkAndSetStatus(s status, ds DataSource) error {
+// initStatus sets the status of a data source to in progress. The operation is
+// successfull only if the current status of the data source is either idle or failed
+func (dp *DataProvisioner) initStatus(source DataSource) error {
 	dp.Lock()
 	defer dp.Unlock()
 
-	if s := dp.status[ds.file]; s == inprogress || s == done {
+	if s := dp.status[source.File]; s == inprogress || s == done {
 		return errors.New("DataProvisioner: data provisioning already initiated / completed")
 	}
-	dp.status[ds.file] = s
+	dp.status[source.File] = inprogress
 	return nil
 }
 
-func (dp *DataProvisioner) fetchData(ds DataSource) (string, error) {
+func (dp *DataProvisioner) fetchData(source DataSource) (string, error) {
 	// Before proceeding, ensure data provisioning has not been initiated / completed already
-	if err := dp.checkAndSetStatus(inprogress, ds); err != nil {
+	if err := dp.initStatus(source); err != nil {
 		return "", err
 	}
 
 	// Should an error occur, set status to failed
 	var s status = failed
 	defer func() {
-		dp.setStatus(ds, s)
+		dp.setStatus(source, s)
 	}()
 
-	// Fetch data from remote server
-	u := url.URL{Host: ds.host + ":" + ds.port, Scheme: "https", Path: "data/" + ds.file}
+	// If data is stored locally, only check whether file exists and return
+	if sameHost(dp.host, source.Host) == true {
+		path := pathPrefix + source.File
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return "", err
+		}
+		s = done
+		return path, nil
+	}
+
+	// Data not stored locally, fetch it from remote server
+	u := url.URL{Host: source.Host, Scheme: "http", Path: "data/" + source.File}
 	resp, err := http.Get(u.String())
 	if err != nil {
 		return "", err
@@ -101,8 +117,8 @@ func (dp *DataProvisioner) fetchData(ds DataSource) (string, error) {
 	defer resp.Body.Close()
 
 	// Create output file. File closure not deferred intentionally
-	localPath := localPathPrefix + ds.file
-	f, err := os.Create(localPath)
+	path := pathPrefix + source.File
+	f, err := os.Create(path)
 	if err != nil {
 		return "", err
 	}
@@ -111,14 +127,30 @@ func (dp *DataProvisioner) fetchData(ds DataSource) (string, error) {
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
 		f.Close()
-		os.Remove(localPath)
+		os.Remove(path)
 		return "", err
 	}
 	f.Close()
 
 	// Data copied successfully to local file, set status to done
 	s = done
-	return localPath, nil
+	return path, nil
+}
+
+// MissingFiles returns a list of files for which either download failed or no information
+// is available. Files being downloaded or for which location information is available are
+// not returned
+func (dp *DataProvisioner) MissingFiles() []string {
+	dp.Lock()
+	defer dp.Unlock()
+
+	res := []string{}
+	for k, v := range dp.status {
+		if v == idle || v == failed {
+			res = append(res, k)
+		}
+	}
+	return res
 }
 
 // nextSource fetches the next data source to be provisioned. The method will panic if
@@ -128,7 +160,7 @@ func (dp *DataProvisioner) nextSource() DataSource {
 	defer dp.Unlock()
 
 	if dp.queue.Len() == 0 {
-		panic(fmt.Sprintf("DataProvisioner: cannot extract data source from empty queue\n"))
+		panic(fmt.Sprintf("DataProvisioner: nextSource: queue is empty\n"))
 	}
 
 	ds := (dp.queue.Back().Value).(DataSource)
@@ -149,8 +181,8 @@ func (dp *DataProvisioner) ProvisionData() []string {
 			time.Sleep(250 * time.Millisecond)
 		}
 
-		fs := dp.nextSource()
-		localPath, err := dp.fetchData(fs)
+		source := dp.nextSource()
+		localPath, err := dp.fetchData(source)
 		if err != nil {
 			continue
 		}
@@ -162,9 +194,9 @@ func (dp *DataProvisioner) ProvisionData() []string {
 }
 
 // setStatus sets the data source status to a client-specified value
-func (dp *DataProvisioner) setStatus(ds DataSource, s status) {
+func (dp *DataProvisioner) setStatus(source DataSource, s status) {
 	dp.Lock()
 	defer dp.Unlock()
 
-	dp.status[ds.file] = s
+	dp.status[source.File] = s
 }

@@ -1,11 +1,11 @@
 package app
 
 import (
-	"fmt"
 	"log"
 	"net/rpc"
 
 	"github.com/giulioborghesi/mapreduce/service"
+	"github.com/giulioborghesi/mapreduce/utils"
 )
 
 // StartMaster starts a MapReduce master
@@ -17,20 +17,20 @@ func StartMaster() {
 
 	// Call Map function
 	mapCtx := &service.MapRequestContext{TaskID: 0, FilePath: "/Users/giulioborghesi/tmp/example.dat"}
-	reply := new(service.Status)
+	reply := new(service.Void)
 
-	err = client.Call("MapReduce.Map", mapCtx, reply)
+	err = client.Call("MapService.Map", mapCtx, reply)
 	if err != nil {
 		log.Fatal("master: server status: ", err)
 	}
 
 	// Call Reduce function
-	reduceCtx := &service.ReduceRequestContext{FilePaths: []string{"/Users/giulioborghesi/tmp/0"}}
+	sources := []utils.DataSource{utils.DataSource{File: "0", Host: "localhost"}}
+	reduceCtx := &service.ReduceRequestContext{Sources: sources}
 
-	err = client.Call("MapReduce.Reduce", reduceCtx, reply)
+	err = client.Call("ReduceService.Reduce", reduceCtx, reply)
 	if err != nil {
 		log.Fatal("master: server status: ", err)
 	}
 
-	fmt.Printf("Server status: %v\n", bool(*reply))
 }

@@ -13,7 +13,7 @@ import (
 func StartWorker() {
 	// Register MapReduce service endpoints
 	ms := &service.MapService{}
-	rs := &service.ReduceService{}
+	rs := &service.ReduceService{Host: "localhost"}
 	rpc.Register(ms)
 	rpc.Register(rs)
 	rpc.HandleHTTP()
