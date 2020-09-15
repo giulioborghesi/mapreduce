@@ -54,7 +54,7 @@ type MapService struct{}
 // Map implements a MapReduce map service endpoint. The service takes as input
 // a path to a file containing a list of input records and generates an
 // intermediate file of sorted key-value pairs.
-func (srvc *MapService) Map(ctx *MapRequestContext, s *Status) error {
+func (srvc *MapService) Map(ctx *MapRequestContext, _ *Void) error {
 	f, err := os.Open(ctx.FilePath)
 	if err != nil {
 		return err
@@ -78,10 +78,5 @@ func (srvc *MapService) Map(ctx *MapRequestContext, s *Status) error {
 		mapper.Map(l, dict)
 	}
 
-	if err = writeIntermediateFile(dict, ctx.TaskID); err != nil {
-		return err
-	}
-
-	*s = Status(true)
-	return nil
+	return writeIntermediateFile(dict, ctx.TaskID)
 }
