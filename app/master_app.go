@@ -2,35 +2,91 @@ package app
 
 import (
 	"log"
-	"net/rpc"
+	"net"
+	"time"
 
-	"github.com/giulioborghesi/mapreduce/service"
-	"github.com/giulioborghesi/mapreduce/utils"
+	"github.com/giulioborghesi/mapreduce/master"
 )
 
-// StartMaster starts a MapReduce master
-func StartMaster() {
-	client, err := rpc.DialHTTP("tcp", ":1234")
-	if err != nil {
-		log.Fatal("master: dial http: ", err)
+const (
+	// retries is the maximum number of attempts to contact workers
+	retries = 17
+)
+
+// findActiveWorkers attempts to contact candidate workers; on success, these
+// workers will be added to the pool of available workers. The algorithm uses
+// retries with exponential backoff to wait for workers whose initialization
+// is slow
+func findActiveWorkers(addrs []string) []string {
+	fact := 1
+	res := make([]string, 0, len(addrs))
+
+	n := len(addrs)
+	for i := 1; i <= retries; i++ {
+		log.Println("Contacting workers, attempt: ", i)
+		for j := len(addrs) - 1; j >= 0; j-- {
+			conn, err := net.Dial("tcp", addrs[j])
+			if err == nil {
+				conn.Close()
+				res = append(res, addrs[j])
+				addrs = addrs[:n-1]
+				n--
+			}
+		}
+
+		if n == 0 || i == retries {
+			break
+		}
+
+		wait := time.Duration(fact) * time.Millisecond
+		log.Println("Not all workers available, waiting for ", wait,
+			" before retrying")
+		time.Sleep(wait)
+		fact *= 2
 	}
 
-	// Call Map function
-	mapCtx := &service.MapRequestContext{TaskID: 0, FilePath: "/Users/giulioborghesi/tmp/example.dat"}
-	reply := new(service.Void)
+	return res
+}
 
-	err = client.Call("MapService.Map", mapCtx, reply)
-	if err != nil {
-		log.Fatal("master: server status: ", err)
+// StartMaster initializes the MapReduce master and starts the MapReduce
+// computation
+func StartMaster(addrs []string, filePath string, nMapper, nReducer int) {
+	addrs = findActiveWorkers(addrs)
+	if len(addrs) == 0 {
+		log.Println("No worker available, terminating program...")
+		return
 	}
 
-	// Call Reduce function
-	sources := []utils.DataSource{utils.DataSource{File: "0", Host: "localhost"}}
-	reduceCtx := &service.ReduceRequestContext{Sources: sources}
+	c := master.MakeCoordinator(addrs, filePath, nMapper, nReducer)
+	c.Run()
+	/*
+		_, err := wor.MakeMaster(addrs)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-	err = client.Call("ReduceService.Reduce", reduceCtx, reply)
-	if err != nil {
-		log.Fatal("master: server status: ", err)
-	}
+		client, err := rpc.DialHTTP("tcp", ":1234")
+		if err != nil {
+			log.Fatal("master: dial http: ", err)
+		}
 
+		// Call Map function
+		mapCtx := &service.MapRequestContext{TaskID: 0, FilePath: "/Users/giulioborghesi/tmp/example.dat"}
+		reply := new(service.Void)
+
+		err = client.Call("MapService.Map", mapCtx, reply)
+		if err != nil {
+			log.Fatal("master: server status: ", err)
+		}
+
+		// Call Reduce function
+		sources := []utils.DataSource{utils.DataSource{File: "0", Host: "localhost:1234"}}
+		reduceCtx := &service.ReduceRequestContext{Sources: sources}
+
+		err = client.Call("ReduceService.Reduce", reduceCtx, reply)
+		if err != nil {
+			log.Fatal("master: server status: ", err)
+		}
+	*/
 }

@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/giulioborghesi/mapreduce/service"
+	"github.com/giulioborghesi/mapreduce/workers"
 )
 
 // workersManager keeps track of the workers health
@@ -15,12 +15,16 @@ type workersManager struct {
 }
 
 // makeWorkersManager creates a new workersManager object from a list of
-// workers' addresses
-func makeWorkersManager(addrs []string) *workersManager {
+// workers
+func makeWorkersManager(wrkrs []worker) *workersManager {
 	m := new(workersManager)
-	for i, addr := range addrs {
-		id := int32(i)
-		m.wrkrs[id] = &worker{id: id, addr: addr, status: healthy}
+	m.wrkrs = make(map[int32]*worker)
+	for _, wrkr := range wrkrs {
+		if _, ok := m.wrkrs[wrkr.id]; ok {
+			panic(fmt.Sprintf("makeworkersmanager: worker %d already "+
+				"registered", wrkr.id))
+		}
+		m.wrkrs[wrkr.id] = &wrkr
 	}
 	return m
 }
@@ -55,7 +59,7 @@ func (m *workersManager) updatedWorkersStatus() map[int32]workerStatus {
 				return
 			}
 
-			err = client.Call(statusTask, service.Void{}, new(service.Void))
+			err = client.Call(statusTask, workers.Void{}, new(workers.Void))
 			if err != nil {
 				rchn <- dead
 				return

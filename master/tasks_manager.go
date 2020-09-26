@@ -14,13 +14,17 @@ type tasksManager struct {
 // makeTasksManager creates a new tasksManager object from a slice of tasks.
 // The tasks in the slice are required to have distinct IDs, otherwise the
 // function will panic
-func makeTasksManager(ts []task) *tasksManager {
+func makeTasksManager(tsks []task) *tasksManager {
 	m := new(tasksManager)
-	for _, t := range ts {
-		if _, ok := m.tsks[t.id]; ok {
-			panic(fmt.Sprintf("maketasksmonitor: task already registered"))
+	m.tsks = make(map[int32]*task)
+	m.wrkr2tsk = make(map[int32]map[int32]bool)
+
+	for _, tsk := range tsks {
+		if _, ok := m.tsks[tsk.id]; ok {
+			panic(fmt.Sprintf("maketasksmonitor: task %d already registered",
+				tsk.id))
 		}
-		m.tsks[t.id] = &t
+		m.tsks[tsk.id] = &tsk
 	}
 	return m
 }
@@ -32,15 +36,19 @@ func (m *tasksManager) assignWorkerToTask(wrkrID, tskID int32) {
 	m.Lock()
 	defer m.Unlock()
 
+	if _, ok := m.wrkr2tsk[wrkrID]; !ok {
+		m.wrkr2tsk[wrkrID] = make(map[int32]bool)
+	}
 	m.wrkr2tsk[wrkrID][tskID] = true
 
 	ts, ok := m.tsks[tskID]
 	if !ok {
-		panic(fmt.Sprintf("assignworkertotask: task not found"))
+		panic(fmt.Sprintf("assignworkertotask: task %d not found", tskID))
 	}
 
 	if ts.status != idle {
-		panic(fmt.Sprintf("assignworkertotask: task already assigned to worker"))
+		panic(fmt.Sprintf("assignworkertotask: task %d already assigned to "+
+			"worker", tskID))
 	}
 	m.tsks[tskID].status = inProgress
 }

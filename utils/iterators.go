@@ -68,7 +68,8 @@ func (it *ValueIterator) HasNext() bool {
 // assumes that such value exists, and will panic otherwise
 func (it *ValueIterator) Next() (string, error) {
 	if it.HasNext() == false {
-		panic(fmt.Sprintf("ValueIterator: no additional value exists for key %s", it.Key))
+		panic(fmt.Sprintf("ValueIterator: no additional value exists for "+
+			"key %s", it.Key))
 	}
 
 	// Fetch next value
@@ -92,8 +93,8 @@ type KeyValueIterator struct {
 	its []inputIterator
 }
 
-// MakeKeyValueIterator creates and initializes a pointer to a new KeyValueIterator
-// object
+// MakeKeyValueIterator creates and initializes a pointer to a new
+// KeyValueIterator object
 func MakeKeyValueIterator(rs ...io.Reader) (*KeyValueIterator, error) {
 	its := []inputIterator{}
 	for _, r := range rs {
@@ -107,9 +108,9 @@ func MakeKeyValueIterator(rs ...io.Reader) (*KeyValueIterator, error) {
 	return &KeyValueIterator{its: its}, nil
 }
 
-// Next returns the key and corresponding values iterator for the next unprocessed
-// key-values pair. The method assumes that data has not been fully consumed yet,
-// and will panic should this condition not be satisfied
+// Next returns the key and corresponding values iterator for the next
+// unprocessed key-values pair. The method assumes that data has not been fully
+// consumed yet, and will panic should this condition not be satisfied
 func (kvIt *KeyValueIterator) Next() (string, *ValueIterator) {
 	if kvIt.HasNext() == false {
 		panic(fmt.Sprintf("KeyValueIterator: no additional key-values exists"))

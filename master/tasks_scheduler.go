@@ -12,6 +12,19 @@ type tasksScheduler struct {
 	sync.Mutex
 }
 
+func makeTasksScheduler(wrkrs []worker, tsks []task) *tasksScheduler {
+	ts := new(tasksScheduler)
+	for _, wrkr := range wrkrs {
+		ts.addWorker(wrkr.id)
+
+	}
+
+	for _, tsk := range tsks {
+		ts.addTask(tsk.id, tsk.priority)
+	}
+	return ts
+}
+
 // addTask adds a task to the tasks queue
 func (ts *tasksScheduler) addTask(id int32, priority int8) {
 	ts.Lock()

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -33,15 +32,14 @@ type DataSource struct {
 // DataProvisioner allows a service to provision data stored in remote hosts. The
 // provisioner will contact the host storing the data through HTTP and download it
 type DataProvisioner struct {
-	host   string
 	status map[string]status
 	queue  list.List
 	sync.Mutex
 }
 
 // MakeDataProvisioner initializes the data provisioner from a list of data sources
-func MakeDataProvisioner(host string, sources []DataSource) *DataProvisioner {
-	dp := &DataProvisioner{host: host, status: make(map[string]status)}
+func MakeDataProvisioner(sources []DataSource) *DataProvisioner {
+	dp := &DataProvisioner{status: make(map[string]status)}
 	for _, source := range sources {
 		dp.status[source.File] = idle
 		if source.Host != "" {
@@ -50,14 +48,6 @@ func MakeDataProvisioner(host string, sources []DataSource) *DataProvisioner {
 		}
 	}
 	return dp
-}
-
-// sameHost checks whether two hosts are the same
-func sameHost(hostA string, hostB string) bool {
-	hostA = strings.Split(hostA, ":")[0]
-	hostB = strings.Split(hostB, ":")[0]
-	fmt.Println(hostA, hostB)
-	return hostA == hostB
 }
 
 // AddSource adds a data source to the DataProvisioner object
@@ -97,16 +87,6 @@ func (dp *DataProvisioner) fetchData(source DataSource) (string, error) {
 	defer func() {
 		dp.setStatus(source, s)
 	}()
-
-	// If data is stored locally, only check whether file exists and return
-	if sameHost(dp.host, source.Host) == true {
-		path := pathPrefix + source.File
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return "", err
-		}
-		s = done
-		return path, nil
-	}
 
 	// Data not stored locally, fetch it from remote server
 	u := url.URL{Host: source.Host, Scheme: "http", Path: "data/" + source.File}

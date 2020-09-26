@@ -1,4 +1,4 @@
-package service
+package workers
 
 import (
 	"io"
@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	rootPath = "/Users/giulioborghesi/tmp/"
+	prefixPath = "/Users/giulioborghesi/tmp/mapper/"
 )
 
 // SendData serves local files download requests. It searches for the requested file
@@ -16,7 +16,7 @@ const (
 // error. Since SendData is only accessible by internal services, it is assumed that
 // these services are not acting maliciously, and that requests are well formed
 func SendData(w http.ResponseWriter, r *http.Request) {
-	path := rootPath + strings.TrimPrefix(strings.TrimLeft(r.URL.Path, "/"), "data/")
+	path := prefixPath + strings.TrimPrefix(strings.TrimLeft(r.URL.Path, "/"), "data/")
 
 	f, err := os.Open(path)
 	if err != nil {

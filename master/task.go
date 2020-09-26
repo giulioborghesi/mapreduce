@@ -22,17 +22,18 @@ type task struct {
 	cnt      int
 	priority int8
 	method   string
+	filePath string
 	status   taskStatus
 }
 
 // makeMapperTask creates a new Mapper task
-func makeMapperTask(id int32, idx, cnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: cnt,
+func makeMapperTask(id int32, idx, reducerCnt int) task {
+	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: reducerCnt,
 		priority: 0, method: mapTask, status: idle}
 }
 
 // makeMapperTask creates a new Reducer task
-func makeReducerTask(id int32, idx, cnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: cnt,
+func makeReducerTask(id int32, idx, mapperCnt int) task {
+	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: mapperCnt,
 		priority: 1, method: reduceTask, status: idle}
 }
