@@ -1,11 +1,9 @@
 package master
 
 import (
-	"net"
-	"net/rpc"
 	"sync"
-	"time"
 
+	"github.com/giulioborghesi/mapreduce/utils"
 	"github.com/giulioborghesi/mapreduce/workers"
 )
 
@@ -21,7 +19,7 @@ type Coordinator struct {
 	ts   tasksScheduler
 	tm   tasksManager
 	wm   workersManager
-	cv   sync.Cond
+	cv   *sync.Cond
 }
 
 // createMapReduceTasks creates the MapReduce tasks for the MapReduce
@@ -63,12 +61,18 @@ func MakeCoordinator(addrs []string, file string,
 	c.tm = *makeTasksManager(tsks)
 	c.wm = *makeWorkersManager(wrkrs)
 	c.ts = *makeTasksScheduler(wrkrs, tsks)
+	c.cv = sync.NewCond(new(sync.Mutex))
 	return c
 }
 
 // Run starts the MapReduce computation on the Master side
 func (c *Coordinator) Run() {
+	for i := 0; i < utils.Min(maxGoRoutines, c.wm.activeWorkers()); i++ {
+		c.executeTask()
+	}
 
+	for {
+	}
 }
 
 // executeTask pops tasks from the queue and executes them
@@ -91,19 +95,18 @@ func (c *Coordinator) executeTask() {
 
 		// Create client with timeout. On error, mark worker as dead
 		addr := c.wm.worker(wrkrID).addr
-		conn, err := net.DialTimeout("tcp", addr, time.Minute)
+		client, err := utils.DialHTTP("tcp", addr)
 		if err != nil {
 			c.wm.reportFailedWorker(wrkrID)
 			continue
 		}
-		client := rpc.NewClient(conn)
 
 		// Prepare and submit request
 		tsk := c.tm.task(tskID)
 		ctx := workers.RequestContext{Idx: tsk.idx, MapperCnt: tsk.mapperCnt,
 			ReducerCnt: tsk.reducerCnt, File: c.file}
-		reply := new(*workers.Status)
-		call := client.Go(tsk.method, &ctx, reply, nil)
+		reply := new(workers.Status)
+		call := client.Go(tsk.method, ctx, reply, nil)
 
 		// Wait for task to complete
 		res := <-call.Done
@@ -114,7 +117,7 @@ func (c *Coordinator) executeTask() {
 
 		// Update task status and insert worker back into task scheduler
 		tskStatus := *res.Reply.(*workers.Status)
-		c.tm.updateTaskStatus(tskStatus, tskID, wrkrID)
+		c.tm.updateTaskStatus(tskStatus, tskID)
 		c.ts.addWorker(wrkrID)
 	}
 }

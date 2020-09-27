@@ -9,6 +9,10 @@ const (
 	statusTask = "MapReduceService.Status"
 	// invalidWorkerID is the ID used for tasks not assigned to a worker yet
 	invalidWorkerID = -1
+	// high is the priority of a Map task
+	high = 0
+	// low is the priority of a Reduce task
+	low = 1
 )
 
 // task represents a generic task in a MapReduce computation. Aside
@@ -17,7 +21,7 @@ const (
 // tasks of the same type and the number of its consumers / producers
 type task struct {
 	id         int32
-	tskID      int32
+	wrkrID     int32
 	idx        int
 	mapperCnt  int
 	reducerCnt int
@@ -29,14 +33,14 @@ type task struct {
 
 // makeMapperTask creates a new Mapper task
 func makeMapperTask(id int32, idx, mapperCnt, reducerCnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx,
-		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: 0,
+	return task{id: id, wrkrID: invalidWorkerID, idx: idx,
+		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: high,
 		method: mapTask, status: idle}
 }
 
 // makeMapperTask creates a new Reducer task
 func makeReducerTask(id int32, idx, mapperCnt, reducerCnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx,
-		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: 0,
-		method: mapTask, status: idle}
+	return task{id: id, wrkrID: invalidWorkerID, idx: idx,
+		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: low,
+		method: reduceTask, status: idle}
 }

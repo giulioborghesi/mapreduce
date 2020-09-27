@@ -21,7 +21,8 @@ func makeTasksManager(tsks []task) *tasksManager {
 	m.tsks = make(map[int32]*task)
 	m.wrkr2tsk = make(map[int32]map[int32]bool)
 
-	for _, tsk := range tsks {
+	for idx := range tsks {
+		tsk := tsks[idx]
 		if _, ok := m.tsks[tsk.id]; ok {
 			panic(fmt.Sprintf("maketasksmonitor: task %d already registered",
 				tsk.id))
@@ -52,6 +53,7 @@ func (m *tasksManager) assignWorkerToTask(wrkrID, tskID int32) {
 		panic(fmt.Sprintf("assignworkertotask: task %d already assigned to "+
 			"worker", tskID))
 	}
+	m.tsks[tskID].wrkrID = wrkrID
 	m.tsks[tskID].status = inProgress
 }
 
@@ -76,25 +78,18 @@ func (m *tasksManager) task(tskID int32) *task {
 // the task and the worker must be valid; additionally, the task must be
 // associated with the worker. If these conditions are not satisfied, this
 // method will panic
-func (m *tasksManager) updateTaskStatus(tskStatus workers.Status, tskID,
-	wrkrID int32) {
+func (m *tasksManager) updateTaskStatus(tskStatus workers.Status,
+	tskID int32) {
 	if _, ok := m.tsks[tskID]; !ok {
 		panic(fmt.Sprintf("updatetaskstatus: task %d not found", tskID))
-	}
-
-	// Worker must be valid and task must be associated with worker
-	if _, ok := m.wrkr2tsk[wrkrID]; !ok {
-		panic(fmt.Sprintf("updatetaskstatus: worker %d not found", wrkrID))
-	}
-	if _, ok := m.wrkr2tsk[wrkrID][tskID]; !ok {
-		panic(fmt.Sprintf("updatetaskstatus: task %d not associated with"+
-			"worker %d", tskID, wrkrID))
 	}
 
 	if tskStatus == workers.SUCCESS {
 		m.tsks[tskID].status = done
 	} else {
+		wrkrID := m.tsks[tskID].wrkrID
 		delete(m.wrkr2tsk[wrkrID], tskID)
+		m.tsks[tskID].wrkrID = invalidWorkerID
 		m.tsks[tskID].status = failed
 	}
 }
