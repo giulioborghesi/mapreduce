@@ -101,5 +101,5 @@ func (srvc *MapReduceService) Map(ctx *RequestContext, s *Status) error {
 
 		mapper.Map(l, kvPairs)
 	}
-	return writeIntermediateFiles(kvPairs, ctx.Idx, ctx.Cnt)
+	return writeIntermediateFiles(kvPairs, ctx.Idx, ctx.MapperCnt)
 }

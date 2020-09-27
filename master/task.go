@@ -16,24 +16,27 @@ const (
 // and task type, a task object also stores its position (idx) within
 // tasks of the same type and the number of its consumers / producers
 type task struct {
-	id       int32
-	tskID    int32
-	idx      int
-	cnt      int
-	priority int8
-	method   string
-	filePath string
-	status   taskStatus
+	id         int32
+	tskID      int32
+	idx        int
+	mapperCnt  int
+	reducerCnt int
+	priority   int8
+	method     string
+	filePath   string
+	status     taskStatus
 }
 
 // makeMapperTask creates a new Mapper task
-func makeMapperTask(id int32, idx, reducerCnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: reducerCnt,
-		priority: 0, method: mapTask, status: idle}
+func makeMapperTask(id int32, idx, mapperCnt, reducerCnt int) task {
+	return task{id: id, tskID: invalidWorkerID, idx: idx,
+		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: 0,
+		method: mapTask, status: idle}
 }
 
 // makeMapperTask creates a new Reducer task
-func makeReducerTask(id int32, idx, mapperCnt int) task {
-	return task{id: id, tskID: invalidWorkerID, idx: idx, cnt: mapperCnt,
-		priority: 1, method: reduceTask, status: idle}
+func makeReducerTask(id int32, idx, mapperCnt, reducerCnt int) task {
+	return task{id: id, tskID: invalidWorkerID, idx: idx,
+		mapperCnt: mapperCnt, reducerCnt: reducerCnt, priority: 0,
+		method: mapTask, status: idle}
 }

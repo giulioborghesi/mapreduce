@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	sleepFact = 500
+	maxGoRoutines = 20
+	sleepFact     = 500
 )
 
 // Coordinator manages workers and coordinates tasks execution
@@ -29,12 +30,12 @@ func createMapReduceTasks(mapperCnt, reducerCnt int) []task {
 	tsks := make([]task, 0, mapperCnt+reducerCnt)
 	for idx := 0; idx < mapperCnt; idx++ {
 		id := int32(idx)
-		tsks = append(tsks, makeMapperTask(id, idx, reducerCnt))
+		tsks = append(tsks, makeMapperTask(id, idx, mapperCnt, reducerCnt))
 	}
 
 	for idx := 0; idx < reducerCnt; idx++ {
 		id := int32(idx + mapperCnt)
-		tsks = append(tsks, makeReducerTask(id, idx, mapperCnt))
+		tsks = append(tsks, makeReducerTask(id, idx, mapperCnt, reducerCnt))
 	}
 	return tsks
 }
@@ -67,6 +68,7 @@ func MakeCoordinator(addrs []string, file string,
 
 // Run starts the MapReduce computation on the Master side
 func (c *Coordinator) Run() {
+
 }
 
 // executeTask pops tasks from the queue and executes them
@@ -98,7 +100,8 @@ func (c *Coordinator) executeTask() {
 
 		// Prepare and submit request
 		tsk := c.tm.task(tskID)
-		ctx := workers.RequestContext{Idx: tsk.idx, Cnt: tsk.cnt, File: c.file}
+		ctx := workers.RequestContext{Idx: tsk.idx, MapperCnt: tsk.mapperCnt,
+			ReducerCnt: tsk.reducerCnt, File: c.file}
 		reply := new(*workers.Status)
 		call := client.Go(tsk.method, &ctx, reply, nil)
 

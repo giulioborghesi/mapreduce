@@ -50,43 +50,13 @@ func findActiveWorkers(addrs []string) []string {
 
 // StartMaster initializes the MapReduce master and starts the MapReduce
 // computation
-func StartMaster(addrs []string, filePath string, nMapper, nReducer int) {
+func StartMaster(addrs []string, filePath string, reducerCnt int) {
 	addrs = findActiveWorkers(addrs)
 	if len(addrs) == 0 {
 		log.Println("No worker available, terminating program...")
 		return
 	}
 
-	c := master.MakeCoordinator(addrs, filePath, nMapper, nReducer)
+	c := master.MakeCoordinator(addrs, filePath, 1, reducerCnt)
 	c.Run()
-	/*
-		_, err := wor.MakeMaster(addrs)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		client, err := rpc.DialHTTP("tcp", ":1234")
-		if err != nil {
-			log.Fatal("master: dial http: ", err)
-		}
-
-		// Call Map function
-		mapCtx := &service.MapRequestContext{TaskID: 0, FilePath: "/Users/giulioborghesi/tmp/example.dat"}
-		reply := new(service.Void)
-
-		err = client.Call("MapService.Map", mapCtx, reply)
-		if err != nil {
-			log.Fatal("master: server status: ", err)
-		}
-
-		// Call Reduce function
-		sources := []utils.DataSource{utils.DataSource{File: "0", Host: "localhost:1234"}}
-		reduceCtx := &service.ReduceRequestContext{Sources: sources}
-
-		err = client.Call("ReduceService.Reduce", reduceCtx, reply)
-		if err != nil {
-			log.Fatal("master: server status: ", err)
-		}
-	*/
 }
