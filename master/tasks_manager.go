@@ -3,6 +3,8 @@ package master
 import (
 	"fmt"
 	"sync"
+
+	"github.com/giulioborghesi/mapreduce/workers"
 )
 
 type tasksManager struct {
@@ -65,7 +67,34 @@ func (m *tasksManager) failedTasks(wrkrs map[int32]workerStatus) []int32 {
 // panic if no task with the specified id exists
 func (m *tasksManager) task(tskID int32) *task {
 	if _, ok := m.tsks[tskID]; !ok {
-		panic(fmt.Sprintf("task: cannot find task with id: %d", tskID))
+		panic(fmt.Sprintf("task: task %d not found", tskID))
 	}
 	return m.tsks[tskID]
+}
+
+// updateTaskStatus updates the status of a task associated with a worker. Both
+// the task and the worker must be valid; additionally, the task must be
+// associated with the worker. If these conditions are not satisfied, this
+// method will panic
+func (m *tasksManager) updateTaskStatus(tskStatus workers.Status, tskID,
+	wrkrID int32) {
+	if _, ok := m.tsks[tskID]; !ok {
+		panic(fmt.Sprintf("updatetaskstatus: task %d not found", tskID))
+	}
+
+	// Worker must be valid and task must be associated with worker
+	if _, ok := m.wrkr2tsk[wrkrID]; !ok {
+		panic(fmt.Sprintf("updatetaskstatus: worker %d not found", wrkrID))
+	}
+	if _, ok := m.wrkr2tsk[wrkrID][tskID]; !ok {
+		panic(fmt.Sprintf("updatetaskstatus: task %d not associated with"+
+			"worker %d", tskID, wrkrID))
+	}
+
+	if tskStatus == workers.SUCCESS {
+		m.tsks[tskID].status = done
+	} else {
+		delete(m.wrkr2tsk[wrkrID], tskID)
+		m.tsks[tskID].status = failed
+	}
 }

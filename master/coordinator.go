@@ -1,9 +1,10 @@
 package master
 
 import (
-	"fmt"
+	"net"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"github.com/giulioborghesi/mapreduce/workers"
 )
@@ -66,7 +67,6 @@ func MakeCoordinator(addrs []string, file string,
 
 // Run starts the MapReduce computation on the Master side
 func (c *Coordinator) Run() {
-	fmt.Println(c.ts.hasReadyTask())
 }
 
 // executeTask pops tasks from the queue and executes them
@@ -87,18 +87,19 @@ func (c *Coordinator) executeTask() {
 		c.cv.L.Unlock()
 		c.tm.assignWorkerToTask(wrkrID, tskID)
 
-		// Create client. On error, mark worker as dead
+		// Create client with timeout. On error, mark worker as dead
 		addr := c.wm.worker(wrkrID).addr
-		client, err := rpc.DialHTTP("tcp", addr)
+		conn, err := net.DialTimeout("tcp", addr, time.Minute)
 		if err != nil {
 			c.wm.reportFailedWorker(wrkrID)
 			continue
 		}
+		client := rpc.NewClient(conn)
 
 		// Prepare and submit request
 		tsk := c.tm.task(tskID)
 		ctx := workers.RequestContext{Idx: tsk.idx, Cnt: tsk.cnt, File: c.file}
-		reply := new(workers.Status)
+		reply := new(*workers.Status)
 		call := client.Go(tsk.method, &ctx, reply, nil)
 
 		// Wait for task to complete
@@ -108,14 +109,9 @@ func (c *Coordinator) executeTask() {
 			continue
 		}
 
-		// Task may be preempted and fail. Mark task as failed if needed
-		if *res.Reply.(*workers.Status) != workers.SUCCESS {
-			//			c.tm.reportFailure(tskID, wrkrID)
-		} else {
-			//			c.tm.reportSuccess(tskID)
-		}
-
-		// Insert worker back into scheduler
+		// Update task status and insert worker back into task scheduler
+		tskStatus := *res.Reply.(*workers.Status)
+		c.tm.updateTaskStatus(tskStatus, tskID, wrkrID)
 		c.ts.addWorker(wrkrID)
 	}
 }
