@@ -16,7 +16,8 @@ const (
 
 // workersManager keeps track of the workers health
 type workersManager struct {
-	wrkrs map[int32]*worker
+	wrkrs     map[int32]*worker
+	activeCnt int
 	sync.Mutex
 }
 
@@ -24,6 +25,7 @@ type workersManager struct {
 // workers
 func makeWorkersManager(wrkrs []worker) *workersManager {
 	m := new(workersManager)
+	m.activeCnt = len(wrkrs)
 	m.wrkrs = make(map[int32]*worker)
 	for _, wrkr := range wrkrs {
 		if _, ok := m.wrkrs[wrkr.id]; ok {
@@ -35,6 +37,11 @@ func makeWorkersManager(wrkrs []worker) *workersManager {
 	return m
 }
 
+// activeWorkers returns the number of active workers
+func (m *workersManager) activeWorkers() int {
+	return m.activeCnt
+}
+
 // reportFailedWorker should be used by clients to report failed workers. This
 // method will panic if the specified worker ID is invalid
 func (m *workersManager) reportFailedWorker(id int32) {
@@ -43,6 +50,10 @@ func (m *workersManager) reportFailedWorker(id int32) {
 	}
 	m.Lock()
 	defer m.Unlock()
+
+	if m.wrkrs[id].status == healthy {
+		m.activeCnt--
+	}
 	m.wrkrs[id].status = dead
 }
 
@@ -87,7 +98,7 @@ func (m *workersManager) updatedWorkersStatus() map[int32]workerStatus {
 	m.Lock()
 	defer m.Unlock()
 
-	// Update workers status if needed and return
+	// Update workers status if needed
 	for id := range m.wrkrs {
 		res[id] = m.wrkrs[id].status
 		if _, ok := newStatus[id]; !ok {
@@ -99,6 +110,15 @@ func (m *workersManager) updatedWorkersStatus() map[int32]workerStatus {
 			m.wrkrs[id].status = dead
 		}
 	}
+
+	// Update number of active workers and return
+	cnt := 0
+	for _, status := range res {
+		if status == healthy {
+			cnt++
+		}
+	}
+	m.activeCnt = cnt
 	return res
 }
 
