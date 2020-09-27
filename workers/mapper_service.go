@@ -74,9 +74,12 @@ func writeIntermediateFiles(kvPairs map[string][]string, tskIdx,
 
 // Map implements a MapReduce map service endpoint. The service takes as input
 // a path to a file containing a list of input records and generates an
-// intermediate file of sorted key-value pairs.
-func (srvc *MapReduceService) Map(ctx *RequestContext, _ *Void) error {
-	f, err := os.Open(ctx.File + strconv.Itoa(ctx.Idx))
+// intermediate file of sorted key-value pairs. A Map task cannot be preempted
+// and thus is always successfull, unless an irreversible error occur; in that
+// case, however, the return status is ignored and thus its value is irrelevant
+func (srvc *MapReduceService) Map(ctx *RequestContext, s *Status) error {
+	*s = SUCCESS
+	f, err := os.Open(ctx.File)
 	if err != nil {
 		return err
 	}
