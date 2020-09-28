@@ -1,15 +1,18 @@
 package master
 
 import (
+	"log"
 	"sync"
+	"time"
 
 	"github.com/giulioborghesi/mapreduce/utils"
 	"github.com/giulioborghesi/mapreduce/workers"
 )
 
 const (
-	maxGoRoutines = 20
-	sleepFact     = 500
+	maxGoRoutines     = 20
+	sleepTimeInMs     = 500
+	taskDeadlineInMin = 5
 )
 
 // Coordinator manages workers and coordinates tasks execution
@@ -68,11 +71,36 @@ func MakeCoordinator(addrs []string, file string,
 // Run starts the MapReduce computation on the Master side
 func (c *Coordinator) Run() {
 	for i := 0; i < utils.Min(maxGoRoutines, c.wm.activeWorkers()); i++ {
-		c.executeTask()
+		go c.executeTask()
 	}
 
 	for {
+		// Nothing to do if no worker is available
+		if c.wm.activeWorkers() == 0 {
+			log.Fatalln("run: no worker left: aborting mapreduce computation")
+		}
+
+		// Update workers and tasks status
+		wrkrsStatus := c.wm.updatedWorkersStatus()
+		tsksStatus := c.tm.updatedTasksStatus(wrkrsStatus)
+
+		// Reschedule tasks if needed
+		for tskID, tskStatus := range tsksStatus {
+			if tskStatus == failed {
+				c.ts.addTask(tskID, c.tm.task(tskID).priority)
+			}
+		}
+
+		// Interrupt the computation if all reduce tasks have completed,
+		// otherwise sleep and repeat cycle
+		if c.tm.reduceTasksLeft() == 0 {
+			break
+		}
+		log.Printf("Reduce tasks not completed yet: %d",
+			c.tm.reduceTasksLeft())
+		time.Sleep(sleepTimeInMs * time.Millisecond)
 	}
+	log.Println("MapReduce computation completed!")
 }
 
 // executeTask pops tasks from the queue and executes them
@@ -95,7 +123,8 @@ func (c *Coordinator) executeTask() {
 
 		// Create client with timeout. On error, mark worker as dead
 		addr := c.wm.worker(wrkrID).addr
-		client, err := utils.DialHTTP("tcp", addr)
+		client, err := utils.DialHTTP("tcp", addr, taskDeadlineInMin*
+			time.Minute)
 		if err != nil {
 			c.wm.reportFailedWorker(wrkrID)
 			continue
@@ -110,6 +139,7 @@ func (c *Coordinator) executeTask() {
 
 		// Wait for task to complete
 		res := <-call.Done
+		client.Close()
 		if res.Error != nil {
 			c.wm.reportFailedWorker(wrkrID)
 			continue

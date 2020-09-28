@@ -17,13 +17,14 @@ const (
 // DialHTTP is a wrapper around rpc.DialHTTP. It is used to connect to an HTTP
 // RPC serverat the specified network address. Differently from rpc.DialHTTP,
 // a connection with a timeout is used
-func DialHTTP(network, address string) (*rpc.Client, error) {
+func DialHTTP(network, address string, d time.Duration) (*rpc.Client, error) {
 	var err error
-	conn, err := net.DialTimeout(network, address, time.Minute)
+	conn, err := net.DialTimeout(network, address, 500*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
 	io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+	conn.SetDeadline(time.Now().Add(d))
 
 	// Require successful HTTP response
 	// before switching to RPC protocol.
