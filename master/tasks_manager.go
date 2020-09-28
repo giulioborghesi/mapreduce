@@ -10,6 +10,7 @@ import (
 type tasksManager struct {
 	tsks     map[int32]*task
 	wrkr2tsk map[int32]map[int32]bool
+	tskLeft  int
 	sync.Mutex
 }
 
@@ -21,6 +22,7 @@ func makeTasksManager(tsks []task) *tasksManager {
 	m.tsks = make(map[int32]*task)
 	m.wrkr2tsk = make(map[int32]map[int32]bool)
 
+	reduceTskCnt := 0
 	for idx := range tsks {
 		tsk := tsks[idx]
 		if _, ok := m.tsks[tsk.id]; ok {
@@ -28,7 +30,11 @@ func makeTasksManager(tsks []task) *tasksManager {
 				tsk.id))
 		}
 		m.tsks[tsk.id] = &tsk
+		if tsk.method == reduceTask {
+			reduceTskCnt++
+		}
 	}
+	m.tskLeft = reduceTskCnt
 	return m
 }
 
@@ -57,12 +63,10 @@ func (m *tasksManager) assignWorkerToTask(wrkrID, tskID int32) {
 	m.tsks[tskID].status = inProgress
 }
 
-// failedTasks takes as input a map of worker id to worker status. It
-// updates the tasks status and returns a list of ids of failed tasks
-func (m *tasksManager) failedTasks(wrkrs map[int32]workerStatus) []int32 {
-	res := []int32{}
-	// TODO: implement me
-	return res
+// reduceTasksLeft returns the number of reduce tasks left to complete the
+// MapReduce computation
+func (m *tasksManager) reduceTasksLeft() int {
+	return m.tskLeft
 }
 
 // task returns a pointer to the task with the specified id. This method will
@@ -74,18 +78,61 @@ func (m *tasksManager) task(tskID int32) *task {
 	return m.tsks[tskID]
 }
 
+// updatedTasksStatus updates the tasks status based on the workersstatus and
+// returns a dictionary of tasks status indexed by the task id
+func (m *tasksManager) updatedTasksStatus(
+	wrkrs map[int32]workerStatus) map[int32]taskStatus {
+	m.Lock()
+	defer m.Unlock()
+
+	// If worker failed, set status of dependent tasks to failed
+	for wrkrID, wrkrStatus := range wrkrs {
+		if _, ok := m.wrkr2tsk[wrkrID]; !ok {
+			continue
+		}
+
+		if wrkrStatus != healthy {
+			for tskID := range m.wrkr2tsk[wrkrID] {
+				m.tsks[tskID].wrkrID = invalidWorkerID
+				m.tsks[tskID].status = failed
+			}
+		}
+	}
+
+	// Reset failed tasks status to idle and append to return slice
+	res := make(map[int32]taskStatus, 0)
+	m.tskLeft = 0
+	for tskID, tsk := range m.tsks {
+		res[tskID] = tsk.status
+		if tsk.status == failed {
+			tsk.status = idle
+		}
+
+		if tsk.method == reduceTask && tsk.status != done {
+			m.tskLeft++
+		}
+	}
+	return res
+}
+
 // updateTaskStatus updates the status of a task associated with a worker. Both
 // the task and the worker must be valid; additionally, the task must be
 // associated with the worker. If these conditions are not satisfied, this
 // method will panic
 func (m *tasksManager) updateTaskStatus(tskStatus workers.Status,
 	tskID int32) {
+	m.Lock()
+	defer m.Unlock()
+
 	if _, ok := m.tsks[tskID]; !ok {
 		panic(fmt.Sprintf("updatetaskstatus: task %d not found", tskID))
 	}
 
 	if tskStatus == workers.SUCCESS {
 		m.tsks[tskID].status = done
+		if m.tsks[tskID].method == reduceTask {
+			m.tskLeft--
+		}
 	} else {
 		wrkrID := m.tsks[tskID].wrkrID
 		delete(m.wrkr2tsk[wrkrID], tskID)
