@@ -2,16 +2,16 @@ package master
 
 import (
 	"fmt"
-	"net"
-	"net/rpc"
 	"sync"
 	"time"
+
+	"github.com/giulioborghesi/mapreduce/utils"
 
 	"github.com/giulioborghesi/mapreduce/workers"
 )
 
 const (
-	statusTimeout = 200
+	statusDeadlineInMs = 200
 )
 
 // workersManager keeps track of the workers health
@@ -70,15 +70,15 @@ func (m *workersManager) updatedWorkersStatus() map[int32]workerStatus {
 		rchn := make(chan workerStatus)
 		chans[id] = rchn
 		go func() {
-			conn, err := net.DialTimeout("tcp", wrkr.addr,
-				statusTimeout*time.Millisecond)
+			client, err := utils.DialHTTP("tcp", wrkr.addr,
+				statusDeadlineInMs*time.Millisecond)
 			if err != nil {
 				rchn <- dead
 				return
 			}
 
-			client := rpc.NewClient(conn)
 			err = client.Call(statusTask, workers.Void{}, new(workers.Void))
+			client.Close()
 			if err != nil {
 				rchn <- dead
 				return
