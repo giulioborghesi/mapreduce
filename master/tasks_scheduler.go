@@ -9,11 +9,13 @@ import (
 type tasksScheduler struct {
 	ws utils.Stack
 	tq utils.Queue
+	cv *sync.Cond
 	sync.Mutex
 }
 
 func makeTasksScheduler(wrkrs []worker, tsks []task) *tasksScheduler {
 	ts := new(tasksScheduler)
+	ts.cv = sync.NewCond(new(sync.Mutex))
 	for _, wrkr := range wrkrs {
 		ts.addWorker(wrkr.id)
 
@@ -30,6 +32,7 @@ func (ts *tasksScheduler) addTask(id int32, priority int8) {
 	ts.Lock()
 	defer ts.Unlock()
 	ts.tq.Push(utils.QueueItem{ID: id, Priority: priority})
+	ts.cv.Signal()
 }
 
 // addWorker adds a worker to the available workers stack
@@ -37,6 +40,7 @@ func (ts *tasksScheduler) addWorker(id int32) {
 	ts.Lock()
 	defer ts.Unlock()
 	ts.ws.Push(id)
+	ts.cv.Signal()
 }
 
 // hasReadyTask checks whether the scheduler has a task ready to be executed.

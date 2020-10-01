@@ -18,6 +18,7 @@ const (
 type workersManager struct {
 	wrkrs     map[int32]*worker
 	activeCnt int
+	cv        *sync.Cond
 	sync.Mutex
 }
 
@@ -27,7 +28,8 @@ func makeWorkersManager(wrkrs []worker) *workersManager {
 	m := new(workersManager)
 	m.activeCnt = len(wrkrs)
 	m.wrkrs = make(map[int32]*worker)
-	for _, wrkr := range wrkrs {
+	for i := range wrkrs {
+		wrkr := wrkrs[i]
 		if _, ok := m.wrkrs[wrkr.id]; ok {
 			panic(fmt.Sprintf("makeworkersmanager: worker %d already "+
 				"registered", wrkr.id))

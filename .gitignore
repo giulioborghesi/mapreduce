@@ -1,2 +1,4 @@
 mapreduce
+main_master
+main_worker
 *.mod

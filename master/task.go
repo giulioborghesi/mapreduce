@@ -7,6 +7,9 @@ const (
 	reduceTask = "MapReduceService.Reduce"
 	// statusTask is the service method to be used for Status tasks
 	statusTask = "MapReduceService.Status"
+	// dataSourcesUpdateTask is the service method to be used for updating the
+	// data sources
+	dataSourcesUpdateTask = "MapReduceService.UpdateSources"
 	// invalidWorkerID is the ID used for tasks not assigned to a worker yet
 	invalidWorkerID = -1
 	// high is the priority of a Map task

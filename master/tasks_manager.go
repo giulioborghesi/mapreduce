@@ -95,6 +95,7 @@ func (m *tasksManager) updatedTasksStatus(
 			for tskID := range m.wrkr2tsk[wrkrID] {
 				m.tsks[tskID].wrkrID = invalidWorkerID
 				m.tsks[tskID].status = failed
+				m.wrkr2tsk[wrkrID] = make(map[int32]bool)
 			}
 		}
 	}
@@ -102,7 +103,8 @@ func (m *tasksManager) updatedTasksStatus(
 	// Reset failed tasks status to idle and append to return slice
 	res := make(map[int32]taskStatus, 0)
 	m.tskLeft = 0
-	for tskID, tsk := range m.tsks {
+	for tskID := range m.tsks {
+		tsk := m.tsks[tskID]
 		res[tskID] = tsk.status
 		if tsk.status == failed {
 			tsk.status = idle

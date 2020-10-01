@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/giulioborghesi/mapreduce/roles"
+	"github.com/giulioborghesi/mapreduce/utils"
 )
 
 const (
@@ -17,9 +18,9 @@ const (
 
 // writeFile writes the intermediate key / value pairs to file. The filename
 // has the following format: {task index}.{producer index}.
-func writeFile(kvPairs map[string][]string, tskIdx,
+func writeFile(kvPairs map[string][]string, nameBase string,
 	fileIdx int) error {
-	path := mapperPath + strconv.Itoa(tskIdx) + "." + strconv.Itoa(fileIdx)
+	path := mapperPath + nameBase + "." + strconv.Itoa(fileIdx)
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -51,7 +52,7 @@ func writeFile(kvPairs map[string][]string, tskIdx,
 // writeIntermediateFiles partitions the key / value pairs into partitions
 // based on a user-supplied partition functions. Individual partitions are
 // then written to file by calling writeFile
-func writeIntermediateFiles(kvPairs map[string][]string, tskIdx,
+func writeIntermediateFiles(kvPairs map[string][]string, nameBase string,
 	parts int) error {
 	// Partition key / value pairs
 	splitKvPairs := make(map[int]map[string][]string)
@@ -65,7 +66,7 @@ func writeIntermediateFiles(kvPairs map[string][]string, tskIdx,
 
 	// Write one file for each partition of the key / value pairs
 	for i := 0; i < parts; i++ {
-		if err := writeFile(splitKvPairs[i], tskIdx, i); err != nil {
+		if err := writeFile(splitKvPairs[i], nameBase, i); err != nil {
 			return err
 		}
 	}
@@ -101,5 +102,7 @@ func (srvc *MapReduceService) Map(ctx *RequestContext, s *Status) error {
 
 		mapper.Map(l, kvPairs)
 	}
-	return writeIntermediateFiles(kvPairs, ctx.Idx, ctx.MapperCnt)
+
+	nameBase := utils.GetIntermediateFilePrefix(ctx.File, ctx.Idx)
+	return writeIntermediateFiles(kvPairs, nameBase, ctx.ReducerCnt)
 }

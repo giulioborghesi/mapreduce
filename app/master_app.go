@@ -21,16 +21,17 @@ func findActiveWorkers(addrs []string) []string {
 	fact := 1
 	res := make([]string, 0, len(addrs))
 
-	n := len(addrs)
 	for i := 1; i <= retries; i++ {
 		log.Println("Contacting workers, attempt: ", i)
-		for j := len(addrs) - 1; j >= 0; j-- {
+		n := len(addrs)
+		for j := n - 1; j >= 0; j-- {
 			conn, err := net.Dial("tcp", addrs[j])
 			if err == nil {
 				conn.Close()
 				res = append(res, addrs[j])
-				addrs = addrs[:n-1]
 				n--
+				addrs[j], addrs[n] = addrs[n], addrs[j]
+				addrs = addrs[:n]
 			}
 		}
 
@@ -44,7 +45,6 @@ func findActiveWorkers(addrs []string) []string {
 		time.Sleep(wait)
 		fact *= 2
 	}
-
 	return res
 }
 

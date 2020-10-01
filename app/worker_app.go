@@ -19,12 +19,12 @@ func StartWorker(addr string) {
 	}
 
 	// Register MapReduce service endpoints
-	service := &workers.MapReduceService{}
+	service := workers.MakeMapReduceService()
 	rpc.Register(service)
 	rpc.HandleHTTP()
 
 	// Register HTTP endpoint for data transfer
-	//	http.HandleFunc("/data/", service.SendData)
+	http.HandleFunc("/data/", workers.SendData)
 
 	// Create listener and serve incoming requests
 	l, err := net.Listen("tcp", ":"+port)

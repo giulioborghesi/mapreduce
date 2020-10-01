@@ -2,9 +2,9 @@ package master
 
 import (
 	"log"
-	"sync"
 	"time"
 
+	"github.com/giulioborghesi/mapreduce/common"
 	"github.com/giulioborghesi/mapreduce/utils"
 	"github.com/giulioborghesi/mapreduce/workers"
 )
@@ -12,7 +12,7 @@ import (
 const (
 	maxGoRoutines     = 20
 	sleepTimeInMs     = 500
-	taskDeadlineInMin = 5
+	taskDeadlineInMin = 10
 )
 
 // Coordinator manages workers and coordinates tasks execution
@@ -22,7 +22,6 @@ type Coordinator struct {
 	ts   tasksScheduler
 	tm   tasksManager
 	wm   workersManager
-	cv   *sync.Cond
 }
 
 // createMapReduceTasks creates the MapReduce tasks for the MapReduce
@@ -64,7 +63,6 @@ func MakeCoordinator(addrs []string, file string,
 	c.tm = *makeTasksManager(tsks)
 	c.wm = *makeWorkersManager(wrkrs)
 	c.ts = *makeTasksScheduler(wrkrs, tsks)
-	c.cv = sync.NewCond(new(sync.Mutex))
 	return c
 }
 
@@ -91,11 +89,15 @@ func (c *Coordinator) Run() {
 			}
 		}
 
-		// Interrupt the computation if all reduce tasks have completed,
-		// otherwise sleep and repeat cycle
+		// Interrupt the computation if all reduce tasks have completed
 		if c.tm.reduceTasksLeft() == 0 {
 			break
 		}
+
+		// Update the data sources
+		c.updateDataSources(tsksStatus, wrkrsStatus)
+
+		// Some tasks have not completed yet. Wait and then repeat
 		log.Printf("Reduce tasks not completed yet: %d",
 			c.tm.reduceTasksLeft())
 		time.Sleep(sleepTimeInMs * time.Millisecond)
@@ -108,9 +110,9 @@ func (c *Coordinator) executeTask() {
 	for {
 		// Wait until a task is ready to be scheduled. Return early if
 		// MapReduce job has completed
-		c.cv.L.Lock()
+		c.ts.cv.L.Lock()
 		for !c.ts.hasReadyTask() {
-			c.cv.Wait()
+			c.ts.cv.Wait()
 			if c.done {
 				return
 			}
@@ -118,7 +120,7 @@ func (c *Coordinator) executeTask() {
 
 		// Fetch next task to be executed, release lock and update task status
 		tskID, wrkrID := c.ts.nextTask()
-		c.cv.L.Unlock()
+		c.ts.cv.L.Unlock()
 		c.tm.assignWorkerToTask(wrkrID, tskID)
 
 		// Create client with timeout. On error, mark worker as dead
@@ -149,5 +151,54 @@ func (c *Coordinator) executeTask() {
 		tskStatus := *res.Reply.(*workers.Status)
 		c.tm.updateTaskStatus(tskStatus, tskID)
 		c.ts.addWorker(wrkrID)
+	}
+}
+
+// updateDataSources updates the data sources in all workers
+func (c *Coordinator) updateDataSources(tsksStatus map[int32]taskStatus,
+	wrkrsStatus map[int32]workerStatus) {
+	// Prepare message
+	hosts := make(map[int]common.Host)
+	for tskID, tskStatus := range tsksStatus {
+		tsk := c.tm.task(tskID)
+		if tsk.method == reduceTask {
+			continue
+		}
+		if tskStatus == done {
+			wrkr := c.wm.worker(tsk.wrkrID)
+			hosts[tsk.idx] = common.Host(wrkr.addr)
+		} else {
+			hosts[tsk.idx] = ""
+		}
+	}
+
+	// Send the message to all workers asynchronously
+	chans := make(map[int32]chan workers.Void)
+	ctx := workers.UpdateRequestContext{File: c.file, Hosts: hosts}
+	for wrkrID := range wrkrsStatus {
+		wrkr := c.wm.worker(wrkrID)
+		if wrkr.status == dead {
+			continue
+		}
+
+		rchn := make(chan workers.Void)
+		chans[wrkrID] = rchn
+		go func() {
+			client, err := utils.DialHTTP("tcp", wrkr.addr,
+				statusDeadlineInMs*time.Millisecond)
+			if err != nil {
+				rchn <- workers.Void{}
+				return
+			}
+
+			client.Call(dataSourcesUpdateTask, &ctx, new(workers.Void))
+			client.Close()
+			rchn <- workers.Void{}
+		}()
+	}
+
+	// Force synchronization
+	for _, rchn := range chans {
+		<-rchn
 	}
 }
