@@ -3,7 +3,6 @@ package workers
 import (
 	"bufio"
 	"io"
-	"math/rand"
 	"os"
 	"sort"
 	"strconv"
@@ -57,7 +56,7 @@ func writeIntermediateFiles(kvPairs map[string][]string, nameBase string,
 	// Partition key / value pairs
 	splitKvPairs := make(map[int]map[string][]string)
 	for k, v := range kvPairs {
-		i := rand.Int() % parts
+		i := roles.Partition(k, parts)
 		if _, ok := splitKvPairs[i]; !ok {
 			splitKvPairs[i] = make(map[string][]string)
 		}
